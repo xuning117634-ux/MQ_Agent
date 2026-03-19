@@ -46,8 +46,11 @@ cp -r dist/* ../backend/static/
 # Windows PowerShell:
 Copy-Item -Path dist\* -Destination ..\backend\static\ -Recurse -Force
 
-# 启动后端（同时托管前端）
+# 启动后端（同时托管前端，需先激活 venv）
 cd ..
+source venv/bin/activate   
+# Windows: 
+venv\Scripts\activate
 uvicorn backend.main:app --host 0.0.0.0 --port 8002
 ```
 
