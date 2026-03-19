@@ -200,6 +200,15 @@ function App() {
                   updated[updated.length - 1] = { ...assistantMessage }
                   return updated
                 })
+              } else if (data.type === 'error') {
+                flushMessageBuffer()
+                assistantMessage.error = data.message || '服务异常，请稍后重试'
+                assistantMessage.toolStatus = null
+                setMessages(prev => {
+                  const updated = [...prev]
+                  updated[updated.length - 1] = { ...assistantMessage }
+                  return updated
+                })
               } else if (data.type === 'session_update') {
                 // 更新左侧会话标题
                 setSessions(prev => prev.map(s =>
@@ -217,8 +226,27 @@ function App() {
       flushMessageBuffer()
     } catch (error) {
       console.error('Chat error:', error)
-      setMessages(prev => [...prev, { role: 'assistant', content: '错误: ' + error.message }])
+      // 更新已有的 assistant 消息，而不是新增
+      setMessages(prev => {
+        const updated = [...prev]
+        const last = updated[updated.length - 1]
+        if (last && last.role === 'assistant') {
+          updated[updated.length - 1] = { ...last, error: '网络连接失败，请检查服务是否正常运行', toolStatus: null }
+        } else {
+          updated.push({ role: 'assistant', content: '', error: '网络连接失败，请检查服务是否正常运行' })
+        }
+        return updated
+      })
     } finally {
+      // 兜底：如果流结束但 assistant 消息既没内容也没错误，显示异常提示
+      setMessages(prev => {
+        const updated = [...prev]
+        const last = updated[updated.length - 1]
+        if (last && last.role === 'assistant' && !last.content && !last.error) {
+          updated[updated.length - 1] = { ...last, error: '响应异常，请重试', toolStatus: null }
+        }
+        return updated
+      })
       setLoading(false)
       if (bufferTimerRef.current) {
         clearTimeout(bufferTimerRef.current)

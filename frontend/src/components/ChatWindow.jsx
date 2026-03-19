@@ -5,7 +5,7 @@ export default function ChatWindow({ messages, messagesEndRef, loading }) {
   // 判断是否需要显示思考中：loading 为 true，且最后一条 assistant 消息内容为空
   const showThinking = loading && (() => {
     const lastMsg = messages[messages.length - 1]
-    return !lastMsg || lastMsg.role === 'user' || (lastMsg.role === 'assistant' && !lastMsg.content)
+    return !lastMsg || lastMsg.role === 'user' || (lastMsg.role === 'assistant' && !lastMsg.content && !lastMsg.error)
   })()
 
   return (
