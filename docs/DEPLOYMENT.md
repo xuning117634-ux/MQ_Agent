@@ -21,8 +21,8 @@ pip install -r requirements.txt
 cp .env.example .env
 
 # 4. 启动后端（端口 8002）
-uvicorn backend.main:app --host 0.0.0.0 --port 8002 --reload
-```
+uvicorn backend.main:app --port 8002
+#或 python -m uvicorn backend.main:app --port 8002
 
 ### 1.3 前端启动（开发模式）
 
@@ -43,7 +43,8 @@ npm run build
 # 拷贝构建产物到后端静态目录
 # Linux/macOS:
 cp -r dist/* ../backend/static/
-# Windows PowerShell:
+# Windows PowerShell（先清后拷，避免目录冲突）:
+Remove-Item -Path ..\backend\static\* -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item -Path dist\* -Destination ..\backend\static\ -Recurse -Force
 
 # 启动后端（同时托管前端，需先激活 venv）
@@ -52,6 +53,7 @@ source venv/bin/activate
 # Windows: 
 venv\Scripts\activate
 uvicorn backend.main:app --host 0.0.0.0 --port 8002
+#或 python -m uvicorn backend.main:app --host 0.0.0.0 --port 8002
 ```
 
 访问 `http://localhost:8002` 即可使用完整应用。

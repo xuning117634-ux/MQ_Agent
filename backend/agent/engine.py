@@ -1,29 +1,42 @@
 import os
 import json
+import asyncio
 import logging
-from openai import OpenAI
-from backend.skills.registry import get_tools_schema, call_skill
+from openai import AsyncOpenAI
+from backend.skills.registry import scan_skills, get_tools_schema, call_skill, get_skills_context
 
 logger = logging.getLogger(__name__)
 
 
 class AgentEngine:
     def __init__(self):
-        self.client = OpenAI(
+        self.client = AsyncOpenAI(
             api_key=os.getenv('LLM_API_KEY'),
             base_url=os.getenv('LLM_BASE_URL')
         )
         self.model = os.getenv('LLM_MODEL', 'qwen3.5-plus')
+        # 自动扫描并注册所有技能
+        scan_skills()
         self.tools = get_tools_schema()
+        self.skills_context = get_skills_context()
+        logger.info(f"Agent initialized with {len(self.tools)} tools")
 
-    def chat(self, user_message: str):
+    async def chat(self, user_message: str):
         """
         对话引擎，支持 Tool Calling 循环。
-        使用 yield 返回 SSE 事件流。
+        使用 async yield 返回 SSE 事件流，不阻塞事件循环。
         """
         logger.info(f'User message: {user_message}')
 
+        system_prompt = (
+            '你是一个消息Agent助手，可以帮助用户管理消息服务。\n'
+            '规则：\n'
+            '- 对于日常问候、闲聊、问答等普通对话，直接回复即可，不要调用任何工具\n'
+            '- 只有当用户明确要求创建、管理消息事件或服务资源时，才调用工具\n'
+        )
+
         messages = [
+            {'role': 'system', 'content': system_prompt},
             {'role': 'user', 'content': user_message}
         ]
 
@@ -31,20 +44,21 @@ class AgentEngine:
         while True:
             logger.info(f'Calling LLM with {len(self.tools)} tools')
 
-            # 使用流式 API 调用
-            stream = self.client.chat.completions.create(
+            # 使用异步流式 API 调用
+            api_kwargs = dict(
                 model=self.model,
                 messages=messages,
-                tools=self.tools,
-                tool_choice='auto',
                 stream=True
             )
+            if self.tools:
+                api_kwargs['tools'] = self.tools
+            stream = await self.client.chat.completions.create(**api_kwargs)
 
             # 收集完整的 assistant 消息
             full_content = ''
             tool_calls_data = {}  # {index: {id, name, arguments}}
 
-            for chunk in stream:
+            async for chunk in stream:
                 delta = chunk.choices[0].delta if chunk.choices else None
                 if not delta:
                     continue
@@ -109,7 +123,7 @@ class AgentEngine:
                 yield f'data: {json.dumps({"type": "tool_start", "tool_name": tool_name})}\n\n'
 
                 try:
-                    result = call_skill(tool_name, **tool_args)
+                    result = await asyncio.to_thread(call_skill, tool_name, **tool_args)
                     logger.info(f'Tool result: {result}')
                 except Exception as e:
                     logger.error(f'Tool error: {e}')

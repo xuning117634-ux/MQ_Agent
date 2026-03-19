@@ -11,9 +11,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
 from backend.agent.engine import AgentEngine
 
-# 导入技能模块以注册技能
-import backend.skills.static.liveevent
-
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
@@ -166,7 +163,7 @@ async def chat(request: Request):
     async def event_generator():
         assistant_content = ""
         try:
-            for event in agent.chat(user_message):
+            async for event in agent.chat(user_message):
                 if 'data: ' in event:
                     try:
                         event_data = json.loads(event.split('data: ')[1].split('\n')[0])

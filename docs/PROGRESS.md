@@ -10,15 +10,16 @@
 - [x] 2.2 开发基础 Agent 对话引擎（封装大模型 API，注入注册表中的 Skills Schema，支持 SSE 流式输出）。
 - [x] 2.3 开发一个 `POST /api/chat` 接口供前端调用（SSE 响应）。
 
-## 🟢 Epic 3: LiveEvent 服务技能化 (✅ Done - 待验证)
+## 🟢 Epic 3: LiveEvent 服务技能化 (✅ Done)
 - [x] 3.1 阅读 `docs/api/liveevent/create_event.md`。
-- [x] 3.2 在 `backend/skills/static/liveevent.py` 中实现 `create_live_event` 技能并注册。
-- [ ] 3.3 端到端验证：通过对话触发技能调用，验证 API 请求与返回。
+- [x] 3.2 实现 `create_live_event` 技能并注册。
+- [x] 3.3 端到端验证：通过对话触发技能调用，验证 API 请求与返回。
+- [x] 3.4 Skills 架构重构：按 Anthropic 官方规范重构为文件夹式技能包（SKILL.md + scripts/ + references/ + examples/），registry.py 改为自动扫描 + subprocess 执行。
 
 ## ⚪ Epic 4: MQS 服务技能化 (Todo)
-- [ ] 4.1 阅读 `docs/api/mqs_api.md`（按需创建该文件）。
-- [ ] 4.2 在 `backend/skills/static/mqs.py` 中实现"创建 Topic"、"发布消息"技能。
-- [ ] 4.3 通过单元测试验证大模型能否正确路由到 MQS 技能并生成正确参数。
+- [ ] 4.1 阅读 MQS API 文档（按需创建 `docs/api/mqs/` 目录）。
+- [ ] 4.2 在 `backend/skills/mqs/` 下按 Skills 规范创建技能包（SKILL.md + scripts/）。
+- [ ] 4.3 通过端到端验证大模型能否正确路由到 MQS 技能并生成正确参数。
 
 ## ⚪ Epic 5: LiveFlow 服务技能化 (Pending - 待规划)
 - [ ] 待需求明确后补充。

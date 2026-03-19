@@ -263,6 +263,13 @@ function App() {
           0%, 100% { opacity: 1; }
           50% { opacity: .5; }
         }
+        @keyframes thinking-bounce {
+          0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+          40% { transform: scale(1); opacity: 1; }
+        }
+        .thinking-dot {
+          animation: thinking-bounce 1.4s infinite ease-in-out both;
+        }
       `}</style>
       <Sidebar
         sessions={sessions}
@@ -275,7 +282,7 @@ function App() {
       />
       <main className="flex-1 flex flex-col relative bg-white">
         <Header />
-        <ChatWindow messages={messages} messagesEndRef={messagesEndRef} />
+        <ChatWindow messages={messages} messagesEndRef={messagesEndRef} loading={loading} />
         <InputBar onSendMessage={handleSendMessage} disabled={loading} />
       </main>
     </div>
