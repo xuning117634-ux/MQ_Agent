@@ -41,7 +41,10 @@ cd frontend
 npm run build
 
 # 拷贝构建产物到后端静态目录
+# Linux/macOS:
 cp -r dist/* ../backend/static/
+# Windows PowerShell:
+Copy-Item -Path dist\* -Destination ..\backend\static\ -Recurse -Force
 
 # 启动后端（同时托管前端）
 cd ..
