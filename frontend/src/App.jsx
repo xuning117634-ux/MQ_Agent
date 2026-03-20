@@ -114,15 +114,16 @@ function App() {
   // Flush message buffer
   const flushMessageBuffer = () => {
     if (messageBufferRef.current.length > 0) {
+      const chunk = messageBufferRef.current.join('')
+      messageBufferRef.current = []
       setMessages(prev => {
         const updated = [...prev]
         const lastMsg = updated[updated.length - 1]
         if (lastMsg && lastMsg.role === 'assistant') {
-          lastMsg.content += messageBufferRef.current.join('')
+          updated[updated.length - 1] = { ...lastMsg, content: (lastMsg.content || '') + chunk }
         }
         return updated
       })
-      messageBufferRef.current = []
     }
   }
 
