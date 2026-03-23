@@ -45,9 +45,9 @@ Create a demo item.
 
 
 def test_scan_skills_schema_and_call_skill():
-    base_dir = Path(".test_tmp_runtime")
+    base_dir = Path(".test_tmp_runtime").resolve()
     base_dir.mkdir(exist_ok=True)
-    tmp_path = Path(tempfile.mkdtemp(dir=base_dir))
+    tmp_path = Path(tempfile.mkdtemp(dir=str(base_dir))).resolve()
     skill_dir = tmp_path / "demo-skill"
     scripts_dir = skill_dir / "scripts"
     scripts_dir.mkdir(parents=True)

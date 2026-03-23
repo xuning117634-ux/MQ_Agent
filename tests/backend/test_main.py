@@ -31,9 +31,9 @@ def load_main_module(monkeypatch, tmp_path: Path):
 
 
 def make_local_tmp_dir() -> Path:
-    base_dir = Path(".test_tmp_runtime")
+    base_dir = Path(".test_tmp_runtime").resolve()
     base_dir.mkdir(exist_ok=True)
-    return Path(tempfile.mkdtemp(dir=base_dir))
+    return Path(tempfile.mkdtemp(dir=str(base_dir))).resolve()
 
 
 def test_health_endpoint(monkeypatch):
