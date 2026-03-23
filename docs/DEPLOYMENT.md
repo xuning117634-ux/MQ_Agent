@@ -68,6 +68,49 @@ uvicorn backend.main:app --host 0.0.0.0 --port 8002
 | `HW_ID` | LiveEvent 服务 HW_ID | `com.huawei.pass.roma.event` |
 | `HW_APPKEY` | LiveEvent 服务 AppKey | `your_appkey` |
 
+### 1.6 后端单元测试执行
+
+后端测试使用 `pytest`，测试目录按后端代码路径镜像组织：
+
+- `tests/backend/test_main.py` 对应 `backend/main.py`
+- `tests/backend/skills/test_registry.py` 对应 `backend/skills/registry.py`
+- `tests/backend/skills/liveevent/scripts/test_create_event.py` 对应 `backend/skills/liveevent/scripts/create_event.py`
+
+执行步骤如下：
+
+```bash
+# 1. 创建并激活虚拟环境
+python -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+
+# 2. 安装项目依赖（已包含 pytest 和 pytest-asyncio）
+pip install -r requirements.txt
+
+# 3. 在项目根目录执行全部后端测试（推荐统一使用 python -m pytest）
+python -m pytest
+
+# 4. 只执行某一个测试文件
+python -m pytest tests/backend/test_main.py
+python -m pytest tests/backend/skills/test_registry.py
+python -m pytest tests/backend/skills/liveevent/scripts/test_create_event.py
+```
+
+Linux / macOS 与 Windows 的步骤基本一致，区别主要只有虚拟环境激活命令：
+
+- Linux / macOS：`source venv/bin/activate`
+- Windows PowerShell：`venv\Scripts\activate`
+
+为避免不同系统或不同终端下 `pytest` 命令指向错误的解释器，推荐始终使用 `python -m pytest`。
+
+Windows PowerShell 也可以显式使用虚拟环境中的 Python 执行：
+
+```powershell
+.\venv\Scripts\python.exe -m pytest
+.\venv\Scripts\python.exe -m pytest tests/backend/test_main.py
+```
+
+项目已通过 `pytest.ini` 关闭 `cacheprovider`，并且测试代码内部不再依赖 pytest 的 `tmp_path` 临时目录机制，改为在仓库内的 `.test_tmp_runtime/` 下创建临时测试目录，用于避免部分 Windows 环境下出现 `PermissionError: [WinError 5]` 或 `.pytest_cache` 目录冲突。
+
 ---
 
 ## 2. Docker 容器化
