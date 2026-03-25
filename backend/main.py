@@ -1,14 +1,16 @@
-import os
 import json
 import logging
+import os
 import uuid
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI
+from fastapi import Request
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
+
 from backend.agent.engine import AgentEngine
 
 load_dotenv()
@@ -19,7 +21,6 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="消息Agent")
 agent = AgentEngine()
 
-# ---- 会话持久化 ----
 DATA_DIR = Path(__file__).parent / "data"
 SESSIONS_FILE = DATA_DIR / "sessions.json"
 DATA_DIR.mkdir(exist_ok=True)
@@ -27,29 +28,138 @@ DATA_DIR.mkdir(exist_ok=True)
 _sessions = {}
 
 
+def _session_exists(session_id: str) -> bool:
+    return session_id in _sessions
+
+
+def _get_session(session_id: str) -> dict | None:
+    return _sessions.get(session_id)
+
+
+def _load_json_file(file_path: Path) -> dict:
+    with open(file_path, "r", encoding="utf-8") as file_handle:
+        return json.load(file_handle)
+
+
+def _save_json_file(file_path: Path, payload: dict) -> None:
+    with open(file_path, "w", encoding="utf-8") as file_handle:
+        json.dump(payload, file_handle, ensure_ascii=False, indent=2)
+
+
 def load_sessions_from_file():
     global _sessions
-    if SESSIONS_FILE.exists():
-        try:
-            with open(SESSIONS_FILE, 'r', encoding='utf-8') as f:
-                _sessions = json.load(f)
-            logger.info(f"Loaded {len(_sessions)} sessions from file")
-        except Exception as e:
-            logger.error(f"Failed to load sessions: {e}")
-            _sessions = {}
-    else:
+
+    if not SESSIONS_FILE.exists():
+        _sessions = {}
+        return
+
+    try:
+        _sessions = _load_json_file(SESSIONS_FILE)
+        logger.info("Loaded %s sessions from file", len(_sessions))
+    except Exception as exc:
+        logger.error("Failed to load sessions: %s", exc)
         _sessions = {}
 
 
 def save_sessions_to_file():
     try:
-        with open(SESSIONS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(_sessions, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.error(f"Failed to save sessions: {e}")
+        _save_json_file(SESSIONS_FILE, _sessions)
+    except Exception as exc:
+        logger.error("Failed to save sessions: %s", exc)
 
 
-# 启动时加载
+def _build_session_summary(session: dict) -> dict:
+    return {
+        "id": session["id"],
+        "name": session["name"],
+        "createdAt": session["createdAt"],
+        "messageCount": len(session.get("messages", [])),
+    }
+
+
+def _get_sorted_sessions() -> list[dict]:
+    sessions = [_build_session_summary(session) for session in _sessions.values()]
+    sessions.sort(key=lambda item: item["createdAt"], reverse=True)
+    return sessions
+
+
+def _build_new_session(session_name: str) -> dict:
+    return {
+        "id": str(uuid.uuid4()),
+        "name": session_name,
+        "createdAt": datetime.now().isoformat(),
+        "messages": [],
+    }
+
+
+def _append_user_message(session: dict, user_message: str) -> None:
+    session["messages"].append({"role": "user", "content": user_message})
+
+
+def _append_assistant_message(session_id: str, assistant_content: str) -> None:
+    if not assistant_content or not _session_exists(session_id):
+        return
+
+    _sessions[session_id]["messages"].append({
+        "role": "assistant",
+        "content": assistant_content,
+    })
+    save_sessions_to_file()
+
+
+def _build_session_title(message: str) -> str:
+    stripped_message = message.strip()
+    title = stripped_message[:15]
+    if len(stripped_message) > 15:
+        title += "..."
+    return title
+
+
+def _is_first_user_message(session: dict) -> bool:
+    user_messages = [message for message in session["messages"] if message["role"] == "user"]
+    return len(user_messages) == 1
+
+
+def _persist_user_message(session_id: str | None, user_message: str) -> tuple[bool, str | None]:
+    if not session_id or not _session_exists(session_id):
+        return False, None
+
+    session = _get_session(session_id)
+    _append_user_message(session, user_message)
+
+    if not _is_first_user_message(session):
+        save_sessions_to_file()
+        return False, None
+
+    new_title = _build_session_title(user_message)
+    session["name"] = new_title
+    save_sessions_to_file()
+    return True, new_title
+
+
+def _extract_event_text(event: str) -> str:
+    if "data: " not in event:
+        return ""
+
+    try:
+        event_data = json.loads(event.split("data: ")[1].split("\n")[0])
+    except Exception:
+        return ""
+
+    if event_data.get("type") != "text":
+        return ""
+    return event_data.get("content", "")
+
+
+def _build_error_event(message: str) -> str:
+    return f'data: {json.dumps({"type": "error", "message": message})}\n\n'
+
+
+def _build_session_update_event(session_id: str, session_name: str) -> str:
+    payload = {"type": "session_update", "session_id": session_id, "name": session_name}
+    return f"data: {json.dumps(payload)}\n\n"
+
+
 load_sessions_from_file()
 
 
@@ -60,7 +170,6 @@ async def health():
 
 @app.post("/api/auth/login")
 async def login(request: Request):
-    """预留登录接口 - 暂时返回 mock token"""
     data = await request.json()
     username = data.get("username", "")
 
@@ -71,127 +180,75 @@ async def login(request: Request):
     return {
         "token": token,
         "username": username,
-        "message": "Login successful (demo mode)"
+        "message": "Login successful (demo mode)",
     }
 
 
 @app.get("/api/sessions")
 async def get_sessions():
-    """获取所有会话（不含 messages，减少传输量）"""
-    sessions_list = []
-    for s in _sessions.values():
-        sessions_list.append({
-            "id": s["id"],
-            "name": s["name"],
-            "createdAt": s["createdAt"],
-            "messageCount": len(s.get("messages", []))
-        })
-    # 按创建时间倒序
-    sessions_list.sort(key=lambda x: x["createdAt"], reverse=True)
-    return {"sessions": sessions_list}
+    return {"sessions": _get_sorted_sessions()}
 
 
 @app.get("/api/sessions/{session_id}")
 async def get_session(session_id: str):
-    """获取单个会话（含 messages）"""
-    if session_id in _sessions:
-        return _sessions[session_id]
+    session = _get_session(session_id)
+    if session:
+        return session
     return {"error": "Session not found"}
 
 
 @app.post("/api/sessions")
 async def create_session(request: Request):
-    """创建新会话"""
     data = await request.json()
     session_name = data.get("name", "新对话")
 
-    session_id = str(uuid.uuid4())
-    session = {
-        "id": session_id,
-        "name": session_name,
-        "createdAt": datetime.now().isoformat(),
-        "messages": []
-    }
-
-    _sessions[session_id] = session
+    session = _build_new_session(session_name)
+    _sessions[session["id"]] = session
     save_sessions_to_file()
 
-    return {"id": session_id, "name": session_name}
+    return {"id": session["id"], "name": session_name}
 
 
 @app.delete("/api/sessions/{session_id}")
 async def delete_session(session_id: str):
-    """删除会话"""
-    if session_id in _sessions:
-        del _sessions[session_id]
-        save_sessions_to_file()
-        return {"message": "Session deleted"}
-    return {"error": "Session not found"}
+    if not _session_exists(session_id):
+        return {"error": "Session not found"}
+
+    del _sessions[session_id]
+    save_sessions_to_file()
+    return {"message": "Session deleted"}
 
 
 @app.post("/api/chat")
 async def chat(request: Request):
-    """SSE 流式对话接口"""
     data = await request.json()
     user_message = data.get("message", "")
-    session_id = data.get("session_id", None)
+    session_id = data.get("session_id")
 
     if not user_message.strip():
         return {"error": "Empty message"}
 
-    logger.info(f"Chat request: {user_message}")
-
-    # 保存用户消息 + 自动更新标题
-    title_updated = False
-    new_title = None
-    if session_id and session_id in _sessions:
-        session = _sessions[session_id]
-        session["messages"].append({"role": "user", "content": user_message})
-
-        # 如果是第一条用户消息，用内容摘要作为标题
-        user_msgs = [m for m in session["messages"] if m["role"] == "user"]
-        if len(user_msgs) == 1:
-            summary = user_message.strip()[:15]
-            if len(user_message.strip()) > 15:
-                summary += "..."
-            session["name"] = summary
-            title_updated = True
-            new_title = summary
-
-        save_sessions_to_file()
+    logger.info("Chat request: %s", user_message)
+    title_updated, new_title = _persist_user_message(session_id, user_message)
 
     async def event_generator():
         assistant_content = ""
         try:
             async for event in agent.chat(user_message):
-                if 'data: ' in event:
-                    try:
-                        event_data = json.loads(event.split('data: ')[1].split('\n')[0])
-                        if event_data.get('type') == 'text':
-                            assistant_content += event_data.get('content', '')
-                    except:
-                        pass
+                assistant_content += _extract_event_text(event)
                 yield event
-        except Exception as e:
-            logger.error(f"Chat error: {e}")
-            yield f'data: {json.dumps({"type": "error", "message": str(e)})}\n\n'
+        except Exception as exc:
+            logger.error("Chat error: %s", exc)
+            yield _build_error_event(str(exc))
         finally:
-            # 保存 assistant 消息
-            if session_id and session_id in _sessions and assistant_content:
-                _sessions[session_id]["messages"].append({
-                    "role": "assistant",
-                    "content": assistant_content
-                })
-                save_sessions_to_file()
-
-            # 通知前端标题更新
+            if session_id:
+                _append_assistant_message(session_id, assistant_content)
             if title_updated and new_title:
-                yield f'data: {json.dumps({"type": "session_update", "session_id": session_id, "name": new_title})}\n\n'
+                yield _build_session_update_event(session_id, new_title)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
-# 挂载前端静态文件（必须在最后，否则会拦截 /api 路由）
 static_dir = Path(__file__).parent / "static"
 if static_dir.exists():
     app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="frontend")
