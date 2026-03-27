@@ -9,7 +9,7 @@ from backend.skills.registry import call_skill
 from backend.skills.registry import get_skills_context
 from backend.skills.registry import get_tools_schema
 from backend.skills.registry import scan_skills
-
+os.environ['NO_PROXY'] = '*'
 logger = logging.getLogger(__name__)
 
 
